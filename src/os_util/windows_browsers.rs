@@ -397,3 +397,17 @@ fn read_exe_version_info(path: &str) -> Result<VersionInfo> {
         }
     }
 }
+
+
+pub fn register_as_system_browser(app_name: &str, deregister: bool) -> Result<()> {
+    use winreg::*;
+    use std::path::*;
+
+    let self_exe_path = std::env::current_exe().unwrap();
+    let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+    let path = Path::new("SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet");
+
+    let (key, disposition) = hklm.create_subkey(path.join(app_name))?;
+
+    Ok(());
+}

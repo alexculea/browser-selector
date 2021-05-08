@@ -22,14 +22,22 @@ fn main() {
         std::process::exit(1);
     }));
 
-    let cli_arg_open_url = {
-        let arguments: Vec<String> = std::env::args().collect();
-        if arguments.len() >= 2 {
-            arguments[1].to_owned() // arg[0] is executable path    
-        } else { 
-            String::new() 
-        }
+    let app_name = env!("CARGO_PKG_NAME");
+    let app_version = env!("CARGO_PKG_VERSION");
+    let arguments: Vec<String> = std::env::args().collect();
+    let first_cli_argument = if arguments.len() >= 2 {
+        arguments[1].to_owned() // arg[0] is executable path    
+    } else { 
+        String::new() 
     };
+
+    match first_cli_argument.as_str() {
+        "--register" => os_browsers::register_as_system_browser(app_name, false),
+        "--deregister" => os_browsers::register_as_system_browser(app_name, true)
+    };
+
+    let cli_arg_open_url = first_cli_argument;
+    
 
     // let env_name = std::env::var("ENV").unwrap_or("production".to_string());
     // let config_dir = os_util::get_create_config_directory("browser-selector", &env_name).unwrap_or(
@@ -45,11 +53,7 @@ fn main() {
     let mut ui = BrowserSelectorUI::new().expect("Failed to initialize COM or WinUI");
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title(format!(
-            "{} {}",
-            env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
-        ))
+        .with_title(format!("{} {}", app_name, app_version))
         .build(&event_loop)
         .unwrap();
     ui.create(&window)
