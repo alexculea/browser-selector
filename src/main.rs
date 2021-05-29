@@ -1,5 +1,5 @@
-#[macro_use]
-extern crate simple_error;
+#[macro_use] extern crate simple_error;
+#[macro_use] extern crate maplit;
 
 mod error;
 mod os_util;
@@ -32,8 +32,19 @@ fn main() {
     };
 
     match first_cli_argument.as_str() {
-        "--register" => os_browsers::register_as_system_browser(app_name, false),
-        "--deregister" => os_browsers::register_as_system_browser(app_name, true)
+        "--register" => { os_browsers::register_as_system_browser(app_name, app_version, true)
+            .expect(format!("Couldn't register {} {} as system browser.", app_name, app_version).as_str());
+            
+            print!("Program registered as browser capable application within the system.");
+            std::process::exit(0);
+        },
+        "--deregister" => { os_browsers::register_as_system_browser(app_name, app_version, false)
+            .expect(format!("Couldn't de-register {} {} as system browser.", app_name, app_version).as_str());
+
+            print!("Program de-registered as browser capable application within the system.");
+            std::process::exit(0);
+        }   
+        _ => ()
     };
 
     let cli_arg_open_url = first_cli_argument;

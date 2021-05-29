@@ -1,4 +1,7 @@
-use simple_error::SimpleResult as Result;
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use crate::error::BSResult as Result;
 mod winapi {
     pub use winapi::shared::minwindef::DWORD;
     pub use winapi::shared::windef::HICON;
@@ -61,6 +64,8 @@ struct WinExePath {
 impl From<&str> for WinExePath {
     fn from(string_path: &str) -> Self {
         // TODO: Support dobule quote escaped arguments "someArg"
+        // TODO: Use WinAPI to do this instead using this:
+        // https://docs.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shevaluatesystemcommandtemplate
         if let [_, exe_path, args_part, ..] = *string_path.split('"').collect::<Vec<&str>>().as_slice() {
             let arguments = match args_part.len() { 
                 len if len > 0 => args_part.trim().split(' ').collect::<Vec<&str>>(),
@@ -398,16 +403,100 @@ fn read_exe_version_info(path: &str) -> Result<VersionInfo> {
     }
 }
 
+struct Entry<'a> { 
+    name: &'a str,
+    value: &'a str,
+}
+enum EntryType<'a> {
+    Values(Vec<Entry<'a>>),
+    Subkeys(BTreeMap<&'a str, EntryType<'a>>)
+}
 
-pub fn register_as_system_browser(app_name: &str, deregister: bool) -> Result<()> {
+// WIP browser registration notes from Microsoft
+// Stackoverflow: https://stackoverflow.com/a/11877230/4953669
+// MSDN: https://docs.microsoft.com/en-gb/windows/win32/shell/default-programs?redirectedfrom=MSDN
+pub fn register_as_system_browser(app_name: &str, app_ver: &str, register: bool) -> Result<()> {
     use winreg::*;
     use std::path::*;
 
-    let self_exe_path = std::env::current_exe().unwrap();
+    let app_entry = format!("{}-{}", app_name, app_ver);
+    let root_key_name = app_entry.as_str();
+    let self_exe_path = std::env::current_exe()?;
+    let icon_path = format!("{exe_path},0", exe_path=self_exe_path.display());
+    let reinstall_command = format!("\"{exe_path}\" --register", exe_path=self_exe_path.display());
+    let open_command = format!("\"{exe_path}\"", exe_path=self_exe_path.display());
+
     let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-    let path = Path::new("SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet");
+    let root_key_path = Path::new("SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet").to_path_buf();
 
-    let (key, disposition) = hklm.create_subkey(path.join(app_name))?;
+    if !register {
+        hklm.delete_subkey_all(root_key_path)?;
+        return Ok(())
+    }
 
-    Ok(());
+    let registry_keys: BTreeMap<&str, EntryType> = btreemap! {
+        app_entry.as_str() => EntryType::Subkeys(btreemap! {
+            "Capabilities" => EntryType::Subkeys(btreemap! {
+                "FileAssociations" => EntryType::Values(vec![
+                    Entry { name: ".html", value: root_key_name  },
+                    Entry { name: ".htm" , value: root_key_name },
+                    Entry { name: ".xht" , value: root_key_name },
+                    Entry { name: ".xhtml", value: root_key_name },
+                ]),
+                "StartMenu" => EntryType::Values(vec![
+                    Entry { name: "StartMenuInternet", value: root_key_name},
+                ]),
+                "UrlAssociations" => EntryType::Values(vec![
+                    Entry { name: "ftp", value: root_key_name},
+                    Entry { name: "http", value: root_key_name},
+                    Entry { name: "https", value: root_key_name},
+                ]),
+            }),
+            "DefaultIcon" => EntryType::Values(vec![
+                Entry { name: "", value: icon_path.as_str() },
+            ]),
+            "InstallInfo" => EntryType::Values(vec![
+                Entry { name: "HideIconsCommand", value: "" },
+                Entry { name: "IconsVisible", value: "1" },
+                Entry { name: "ReinstallCommand", value: &reinstall_command },
+                Entry { name: "ShowIconsCommand", value: "" },
+            ]),
+            "shell" => EntryType::Subkeys(btreemap! {
+                "open" => EntryType::Subkeys(btreemap! {
+                    "command" => EntryType::Values(vec![
+                        Entry { name: "", value: &open_command },
+                    ]),
+                }),
+            }),
+    })};
+
+    let reg_transaction = registry_keys.iter().try_fold(
+        winreg::transaction::Transaction::new()?,
+        winreg_create_keys_and_children(&root_key_path, &hklm),
+    )?;
+    // TODO: call .rollback on transaction in case of failure
+    reg_transaction.commit()?;
+    Ok(())
+}
+
+type WinregTransaction = winreg::transaction::Transaction;
+
+fn winreg_create_keys_and_children<'a>(parent_path: &'a PathBuf, system_key: &'a winreg::RegKey) -> impl FnMut(WinregTransaction, (&&str, &EntryType)) -> Result<WinregTransaction> + 'a {
+    return move | transaction, (key_name, sub_entry): (&&str, &EntryType) | -> Result<WinregTransaction> {
+        let container_key_path = parent_path.join(key_name);
+        let (container_key, _) = system_key.create_subkey_transacted(container_key_path.clone(), &transaction)?;
+        
+        match sub_entry {
+            EntryType::Subkeys(children) => 
+                children.iter().try_fold(transaction, winreg_create_keys_and_children(&container_key_path, &system_key)),
+            EntryType::Values(children) => {
+                children.iter().try_for_each(|item| -> Result<()> {
+                    container_key.set_value(String::from(item.name), &item.value)?;
+                    Ok(())
+                })?;
+
+                Ok(transaction)
+            },
+        }
+    };
 }
