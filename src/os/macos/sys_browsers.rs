@@ -1,3 +1,5 @@
+// https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Workspace/Articles/InformationAboutFiles.html#//apple_ref/doc/uid/20001004-CJBIDCEF
+
 use crate::{error::BSResult, os::shared::VersionInfo, ui::ListItem};
 
 #[derive(Debug, Clone)]
@@ -69,5 +71,5 @@ impl TryInto<ListItem<Browser>> for &Browser {
 }
 
 pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
-    todo!()
+    Ok(Default::default())
 }

@@ -164,6 +164,7 @@ fn main() {
         })
         .expect("Cannot set on click event handler.");
 
+        ui.center_window_on_cursor_monitor();
         ui.set_main_window_visible(true);
     }
     // end of scope is needed as it drops ui, releases the mutable strong ref from ui_ref

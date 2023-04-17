@@ -34,6 +34,7 @@ pub trait UserInterface<T: Clone> {
     fn create(&mut self, window_title: &str, event_loop: &EventLoop<UserEvent>) -> BSResult<()>;
     fn set_main_window_visible(&self, visible: bool);
     fn get_window_id(&self) -> WindowId;
+    fn center_window_on_cursor_monitor(&self);
 
     fn set_list(&mut self, list: &[ListItem<T>]) -> BSResult<()>;
     fn set_url(&self, url: &str) -> BSResult<()>;

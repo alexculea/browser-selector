@@ -174,7 +174,6 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
             .set_content(ui_container.to_owned())?;
         self.state.container = ComInterface::query::<wrt::Panel>(&ui_container);
 
-        center_window_on_cursor_monitor(&window)?;
         window.set_window_icon(Some(
             winit::window::Icon::from_resource(
                 1,
@@ -197,6 +196,11 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
 
     fn set_main_window_visible(&self, visible: bool) {
         self.state.window.as_ref().expect("No main window. ui::create needs to be called.").set_visible(visible)
+    }
+
+    fn center_window_on_cursor_monitor(&self) {
+        center_window_on_cursor_monitor(&self.state.window)
+            .expect("Couldn't center main window on the mouse monitor.");
     }
 
     fn destroy(&self) {

@@ -2,6 +2,7 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 use winit::window::WindowId;
+use winit::window::WindowBuilder;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -47,7 +48,23 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
     Ok(BrowserSelectorUI { state })
   }
 
-  fn create(&mut self, window_title: &str, event_loop: &EventLoop<UserEvent>) -> BSResult<()> { Ok(()) }
+  fn create(&mut self, title: &str, event_loop: &EventLoop<UserEvent>) -> BSResult<()> { 
+    let window = WindowBuilder::new()
+      .with_title(title)
+      .with_decorations(true)
+      .with_always_on_top(true)
+      .with_inner_size(winit::dpi::LogicalSize {
+          height: 400 as i16,
+          width: 400 as i16,
+      })
+      .with_resizable(false)
+      .with_visible(false)
+      .build(&event_loop)
+      .expect("Failed to create the main window");
+  
+    self.state.window = Some(window);
+    Ok(()) 
+  }
   
   fn get_window_id(&self) -> WindowId {
       self.state.window.as_ref().expect("Mising main window.").id()
@@ -55,6 +72,10 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
 
   fn set_main_window_visible(&self, visible: bool) {
       self.state.window.as_ref().expect("No main window. ui::create needs to be called.").set_visible(visible)
+  }
+
+  fn center_window_on_cursor_monitor(&self) {
+    
   }
 
   fn set_list(&mut self, list: &[ListItem<ItemStateType>]) -> BSResult<()> {

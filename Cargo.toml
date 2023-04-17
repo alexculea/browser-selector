@@ -30,6 +30,7 @@ winreg = { version = '0.9.0', features = ["transactions"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cacao = { version = "0.3.2", features = ["appkit"] }
+appkit-nsworkspace-bindings = "0.1.0"
 
 [build-dependencies]
 embed-resource = "1.4.1"
