@@ -5,6 +5,8 @@ use raw_window_handle::HasRawWindowHandle;
 use simple_error::SimpleResult as Result;
 
 use crate::error::*;
+use crate::os::shared::ActiveWindowInfo;
+
 use winapi::ctypes::c_void;
 use winapi::um::stringapiset::MultiByteToWideChar;
 use winapi::um::winuser::{GetWindowTextW, MessageBoxW};
@@ -167,11 +169,6 @@ pub fn output_panic_text(text: String) {
     }
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct ActiveWindowInfo {
-    pub window_name: Option<String>,
-    pub exe_path: Option<PathBuf>,
-}
 pub fn get_active_window_info() -> ActiveWindowInfo {
     let mut window_name: Option<String> = None;
     let mut exe_path: Option<PathBuf> = None;

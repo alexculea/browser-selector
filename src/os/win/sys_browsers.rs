@@ -1,7 +1,3 @@
-use ::std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
-
-
 use crate::{error::BSResult as Result, ui::{BrowserSelectorUI, UserInterface, ListItem}};
 mod winapi {
     pub use winapi::shared::minwindef::DWORD;
@@ -38,14 +34,6 @@ pub struct Browser {
     pub version: VersionInfo,
 }
 
-impl Browser { 
-    pub fn get_hash(&self) -> String {
-        let mut hasher = DefaultHasher::new();
-        self.exe_path.hash(&mut hasher);
-        hasher.finish().to_string()
-    }
-}
-
 impl Default for Browser {
     fn default() -> Browser {
         Browser {
@@ -60,6 +48,7 @@ impl Default for Browser {
         }
     }
 }
+
 
 impl TryInto<ListItem<Browser>> for &Browser {
     type Error = crate::error::BSError;
@@ -133,42 +122,6 @@ impl From<&str> for WinExePath {
             arguments: Vec::default(),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum BinaryType {
-    Bits32,
-    Bits64,
-    None,
-}
-
-impl Default for BinaryType {
-    fn default() -> BinaryType {
-        BinaryType::None
-    }
-}
-
-impl std::fmt::Display for BinaryType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                BinaryType::Bits32 => "32 bits",
-                BinaryType::Bits64 => "64 bits",
-                _ => "",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct VersionInfo {
-    pub company_name: String,
-    pub file_description: String,
-    pub product_version: String,
-    pub product_name: String,
-    pub binary_type: BinaryType,
 }
 
 pub fn read_system_browsers_sync() -> Result<Vec<Browser>> {

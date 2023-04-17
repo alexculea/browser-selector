@@ -12,7 +12,7 @@ mod os;
 mod ui;
 
 use core::cell::RefCell;
-use os::ActiveWindowInfo;
+use crate::os::shared::ActiveWindowInfo;
 use std::rc::Rc;
 use winit::event_loop::ControlFlow;
 
@@ -141,7 +141,7 @@ fn main() {
                 .find(|item| item.uuid == uuid)
                 .and_then(|item| Some(item.state.as_ref()))
                 .and_then::<std::rc::Rc<Browser>, _>(|browser| {
-                    os::util::spawn_browser_process(
+                    os::shared::spawn_browser_process(
                         &browser.exe_path,
                         browser.arguments.clone(),
                         &open_url_clone,

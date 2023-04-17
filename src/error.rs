@@ -18,6 +18,7 @@ impl std::fmt::Display for BSError {
     }
 }
 
+#[cfg(target_os = "windows")]
 impl From<winrt::Error> for BSError {
     fn from(err: winrt::Error) -> Self {
         BSError::new(format!("[WinRT error] code: {} {}", err.code().0, err.message(),).as_str())
