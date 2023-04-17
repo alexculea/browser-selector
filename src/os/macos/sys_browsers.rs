@@ -71,5 +71,9 @@ impl TryInto<ListItem<Browser>> for &Browser {
 }
 
 pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
+    // Read /Aplications and /System/Applications
+    // For each directory go to <app-folder>/Contents/Info.plist
+    // Using a Plist parser, look under CFBundleURLTypes -> CFBundleURLSchemes, see it includes https
+    // Reading publisher & Version info as well
     Ok(Default::default())
 }

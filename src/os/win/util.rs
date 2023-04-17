@@ -8,9 +8,9 @@ use crate::error::*;
 use crate::os::shared::ActiveWindowInfo;
 
 use winapi::ctypes::c_void;
+use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcess, TerminateProcess};
 use winapi::um::stringapiset::MultiByteToWideChar;
 use winapi::um::winuser::{GetWindowTextW, MessageBoxW};
-use winapi::um::processthreadsapi::{OpenProcess, GetCurrentProcess, TerminateProcess};
 
 pub fn get_hwnd(window: &winit::window::Window) -> winapi::shared::windef::HWND {
     match window.raw_window_handle() {
@@ -169,7 +169,7 @@ pub fn output_panic_text(text: String) {
     }
 }
 
-pub fn get_active_window_info() -> ActiveWindowInfo {
+pub fn get_active_window_info() -> Option<ActiveWindowInfo> {
     let mut window_name: Option<String> = None;
     let mut exe_path: Option<PathBuf> = None;
     unsafe {
@@ -205,10 +205,10 @@ pub fn get_active_window_info() -> ActiveWindowInfo {
         }
     }
 
-    ActiveWindowInfo {
+    Some(ActiveWindowInfo {
         window_name,
         exe_path,
-    }
+    })
 }
 
 pub fn terminate_current_process() {

@@ -1,8 +1,7 @@
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
-use winit::window::Window;
-use winit::window::WindowId;
-use winit::window::WindowBuilder;
+use winit::window::{Window, WindowId, WindowBuilder};
+use winit::platform::macos::{WindowExtMacOS, WindowBuilderExtMacOS};
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -59,6 +58,7 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
       })
       .with_resizable(false)
       .with_visible(false)
+      .with_titlebar_transparent(true)
       .build(&event_loop)
       .expect("Failed to create the main window");
   
@@ -75,7 +75,7 @@ impl<ItemStateType: Clone> UserInterface<ItemStateType> for BrowserSelectorUI<It
   }
 
   fn center_window_on_cursor_monitor(&self) {
-    
+
   }
 
   fn set_list(&mut self, list: &[ListItem<ItemStateType>]) -> BSResult<()> {

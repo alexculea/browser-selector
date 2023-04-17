@@ -16,7 +16,7 @@
             "name": "Debug (LLDB)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/Browsor.exe",
+            "program": "${workspaceFolder}/target/debug/Browsor",
             "args": ["https://github.com/alexculea/Browsor"],
             "cwd": "${workspaceFolder}"
         }

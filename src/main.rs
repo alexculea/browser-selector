@@ -43,7 +43,7 @@ fn main() {
     let mut src_app_opt: Option<ActiveWindowInfo> = None;
 
     if config.statistics {
-        src_app_opt = Some(os::get_active_window_info());
+        src_app_opt = os::get_active_window_info();
         statistics_optional = Some(Rc::new(RefCell::new(data::Statistics::new())));
         let statistics_ref = statistics_optional.clone().unwrap();
         let mut statistics = statistics_ref.borrow_mut();
