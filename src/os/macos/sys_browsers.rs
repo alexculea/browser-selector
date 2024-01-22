@@ -1,6 +1,10 @@
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Workspace/Articles/InformationAboutFiles.html#//apple_ref/doc/uid/20001004-CJBIDCEF
-use crate::{error::BSResult, os::shared::VersionInfo, ui::ListItem};
-use std::fs::*;
+use crate::{
+    error::{BSError, BSResult},
+    os::shared::{BinaryType, VersionInfo},
+    ui::ListItem,
+};
+use std::{fs::*, path::Path};
 
 #[derive(Debug, Clone)]
 pub struct Browser {
@@ -80,28 +84,56 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
     let mut browsers: Vec<Browser> = Vec::with_capacity(5);
     directories.iter().for_each(|dir| {
         read_dir(dir).unwrap().for_each(|file| {
-            let info_plist_path = file.unwrap().path().join("Contents").join("Info.plist");
+            let info_plist_path = file
+                .as_ref()
+                .unwrap()
+                .path()
+                .join("Contents")
+                .join("Info.plist");
+            let app_dir = file.unwrap().path().join("Contents");
             if !info_plist_path.exists() {
                 return;
             }
 
-            if let Some(app_info_dict) = plist::Value::from_file(info_plist_path)
+            if let Some(app_info_dict) = plist::Value::from_file(info_plist_path.clone())
                 .unwrap()
                 .as_dictionary()
             {
                 if let Some(supported_url_types) = app_info_dict.get("CFBundleURLTypes") {
                     if let Some(urls) = supported_url_types.as_array() {
-                        urls.iter().for_each(| url | {
-                            if let Some(url_string) = url.as_string() {
-                                if urls_required.contains(&url_string) {
-                                    browsers.push(browser_from_plist(app_info_dict).unwrap())
+                        urls.iter().for_each(|url_entry| {
+                            if let Some(url_scheme_entry) = url_entry.as_dictionary() {
+                                if let Some(url_schemes) = url_scheme_entry.get("CFBundleURLSchemes") {
+                                    if let Some(url_schemes_list) = url_schemes.as_array() {
+                                        url_schemes_list.iter().for_each(|url_scheme_entry| {
+                                            if let Some(scheme_string) = url_scheme_entry.as_string() {
+                                                if urls_required.contains(&scheme_string) {
+                                                    let browser_info = browser_from_plist(app_info_dict, &app_dir);
+                                                    if browser_info.is_ok() {
+                                                        browsers.push(browser_info.unwrap())
+                                                    } else {
+                                                        println!("Error reading browser info: {}", browser_info.err().unwrap())
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    println!("No CFBundleURLSchemes dictionary found.")
                                 }
+                            } else {
+                                println!("Cannot get CFBundleURLTypes item as dictionary.")
                             }
                         })
+                    } else {
+                        println!("CFBundleURLTypes dictionary found, but can't retrieve it as an array.");
                     }
+                } else {
+                    println!("No CFBundleURLTypes dictionary found.")
                 }
             }
 
+            println!("Finished reading {}", info_plist_path.clone().to_string_lossy());
             // if let app_info.get(key)
         })
     });
@@ -110,15 +142,61 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
     //     files.map
     // }
 
-    Ok(Default::default())
+    Ok(browsers)
 }
 
-fn browser_from_plist(dict: &plist::Dictionary) -> BSResult<Browser> {
-    let exe_path = if let Some(path) = dict.get("CFBundleShortVersionString") {
-        path.as_string()
-    } else { None };
+fn browser_from_plist(dict: &plist::Dictionary, app_dir: &Path) -> BSResult<Browser> {
+    let plist_props = [
+        "CFBundleExecutable",
+        "CFBundleName",
+        "CFBundleShortVersionString",
+    ];
 
-    // Browser {
-    //     exe_path: 
-    // }
+    let prop_values = plist_props
+        .iter()
+        .map(|plist_prop| {
+            dict.get(plist_prop)
+                .ok_or(BSError::new(&format!(
+                    "No {plist_prop} found in Info.plist"
+                )))?
+                .as_string()
+                .ok_or(BSError::new(&format!(
+                    "Cannot convert {plist_prop} to a string."
+                )))
+        })
+        .try_fold(Vec::<String>::new(), |mut result, item| {
+            if item.is_err() {
+                BSResult::Err(item.err().unwrap())
+            } else {
+                result.push(item.unwrap().to_string());
+                BSResult::Ok(result)
+            }
+        })?;
+    let [bin_filename, name, version_code] = prop_values.as_slice() else {
+        unreachable!()
+    };
+
+    let exe_path = app_dir.join("MacOS").join(bin_filename);
+    let exe_path_string = exe_path.to_string_lossy().to_string();
+    let exe_exists = exe_path.exists();
+    let arguments: Vec<String> = Default::default();
+    let icon = String::default();
+
+    let version = VersionInfo {
+        company_name: String::default(),
+        file_description: String::default(),
+        product_version: version_code.to_string(),
+        product_name: name.to_string(),
+        binary_type: BinaryType::None,
+    };
+
+    Ok(Browser {
+        exe_path: exe_path_string,
+        exe_exists,
+        icon_exists: false,
+        version,
+        name: name.to_string(),
+        icon,
+        arguments,
+    })
 }
