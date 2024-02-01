@@ -1,3 +1,7 @@
+use cacao::core_foundation::bundle;
+use plist::Value;
+
+#[warn(unreachable_code)]
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Workspace/Articles/InformationAboutFiles.html#//apple_ref/doc/uid/20001004-CJBIDCEF
 use crate::{
     error::{BSError, BSResult},
@@ -82,8 +86,8 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
     let urls_required = ["https", "http"];
     let directories = ["/Applications", "/System/Applications"];
     let mut browsers: Vec<Browser> = Vec::with_capacity(5);
-    directories.iter().for_each(|dir| {
-        read_dir(dir).unwrap().for_each(|file| {
+    let reading_results = directories.iter().try_for_each(|dir| {
+        read_dir(dir).unwrap().try_for_each(|file| -> BSResult<()> {
             let info_plist_path = file
                 .as_ref()
                 .unwrap()
@@ -92,55 +96,163 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
                 .join("Info.plist");
             let app_dir = file.unwrap().path().join("Contents");
             if !info_plist_path.exists() {
-                return;
+                return Ok(());
             }
 
             if let Some(app_info_dict) = plist::Value::from_file(info_plist_path.clone())
                 .unwrap()
                 .as_dictionary()
             {
-                if let Some(supported_url_types) = app_info_dict.get("CFBundleURLTypes") {
-                    if let Some(urls) = supported_url_types.as_array() {
-                        urls.iter().for_each(|url_entry| {
-                            if let Some(url_scheme_entry) = url_entry.as_dictionary() {
-                                if let Some(url_schemes) = url_scheme_entry.get("CFBundleURLSchemes") {
-                                    if let Some(url_schemes_list) = url_schemes.as_array() {
-                                        url_schemes_list.iter().for_each(|url_scheme_entry| {
-                                            if let Some(scheme_string) = url_scheme_entry.as_string() {
-                                                if urls_required.contains(&scheme_string) {
-                                                    let browser_info = browser_from_plist(app_info_dict, &app_dir);
-                                                    if browser_info.is_ok() {
-                                                        browsers.push(browser_info.unwrap())
-                                                    } else {
-                                                        println!("Error reading browser info: {}", browser_info.err().unwrap())
-                                                    }
-                                                }
-                                            }
-                                        });
-                                    }
-                                } else {
-                                    println!("No CFBundleURLSchemes dictionary found.")
-                                }
-                            } else {
-                                println!("Cannot get CFBundleURLTypes item as dictionary.")
-                            }
+                let url_schemes_result = app_info_dict
+                    .get("CFBundleURLTypes")
+                    .ok_or(BSError::new("No CFBundleURLTypes"))?
+                    .as_array()
+                    .ok_or(BSError::new("Cannot read CFBundleURLTypes as array"))?
+                    .iter()
+                    .map(|item| -> BSResult<Vec<&str>> {
+                        item.as_dictionary()
+                            .ok_or(BSError::new("Cannot read CFBundleURLTypes as dictionary."))?
+                            .get("CFBundleURLSchemes")
+                            .ok_or(BSError::new("No CFBundleURLSchemes key found."))?
+                            .as_array()
+                            .ok_or(BSError::new("Cannot read CFBundleURLSchemes as array."))?
+                            .iter()
+                            .map(|item| Ok(item.as_string().unwrap_or_default()))
+                            .collect()
+                    })
+                    .try_fold(Vec::<&str>::default(), |mut res, item| {
+                        if item.is_err() {
+                            return Err(item.err().unwrap());
+                        }
+
+                        res.append(&mut item.unwrap());
+                        Ok(res)
+                    });
+
+                let mut url_scheme_errors: Vec<BSError> = Vec::new();
+                let url_schemas_option = app_info_dict
+                    .get("CFBundleURLTypes")
+                    .map(|bundle_url_types| bundle_url_types.as_array())
+                    .flatten()
+                    .map(|bundle_url_types| bundle_url_types.iter())
+                    .map(|bundle_url_types_iter| -> BSResult<Vec<Vec<Option<&str>>>> {
+                        bundle_url_types_iter.map(|item| -> BSResult<Vec<Option<&str>>> {
+                            return item.as_dictionary()
+                                .ok_or(BSError::new("Cannot read CFBundleURLTypes as dictionary."))?
+                                .get("CFBundleURLSchemes")
+                                .ok_or(BSError::new("No CFBundleURLSchemes key found."))?
+                                .as_array()
+                                .ok_or(BSError::new("Cannot read CFBundleURLSchemes as array."))?
+                                .iter()
+                                .map(|item| Ok(item.as_string()))
+                                .collect()
+                        }).collect()
+                    })
+                    .map(|bundle_schemes_result| {
+                        if bundle_schemes_result.is_err() {
+                            url_scheme_errors.push(bundle_schemes_result.unwrap_err());
+                        }
+
+                        bundle_schemes_result.ok().map(|bundle_schemes| {
+                            bundle_schemes.iter().fold(Vec::<&str>::default(), |mut res, item| {
+                                res.append(&mut item.clone());
+                                res
+                            })
                         })
-                    } else {
-                        println!("CFBundleURLTypes dictionary found, but can't retrieve it as an array.");
-                    }
-                } else {
-                    println!("No CFBundleURLTypes dictionary found.")
+                    })
+                    .flatten();
+                    
+
+                if url_schemas_option.is_none() {
+                    #[cfg(debug_assertions)]
+                    println!(
+                        "Error reading supported URL Schemes {}",
+                        url_schemes_result.unwrap_err(),
+                    );
+
+                    return Ok(());
                 }
+
+                let mut errors: Vec<BSError> = Vec::new();
+                url_schemes_result.unwrap().iter().for_each(|scheme| {
+                    if urls_required.contains(&scheme) {
+                        let browser_info_res = browser_from_plist(app_info_dict, &app_dir);
+                        if browser_info_res.is_ok() {
+                            browsers.push(browser_info_res.unwrap());
+                        } else {
+                            errors.push(browser_info_res.unwrap_err())
+                        }
+                    }
+                });
+
+                errors.iter().for_each(|err| {
+                    println!("PList reading issue: {err}");
+                });
+
+                // if let Some(supported_url_types) = app_info_dict.get("CFBundleURLTypes") {
+                //     if let Some(urls) = supported_url_types.as_array() {
+                //         urls.iter().for_each(|url_entry| {
+                //             if let Some(url_scheme_entry) = url_entry.as_dictionary() {
+                //                 if let Some(url_schemes) =
+                //                     url_scheme_entry.get("CFBundleURLSchemes")
+                //                 {
+                //                     if let Some(url_schemes_list) = url_schemes.as_array() {
+                //                         url_schemes_list.iter().for_each(|url_scheme_entry| {
+                //                             if let Some(scheme_string) =
+                //                                 url_scheme_entry.as_string()
+                //                             {
+                //                                 if urls_required.contains(&scheme_string) {
+                //                                     let browser_info =
+                //                                         browser_from_plist(app_info_dict, &app_dir);
+                //                                     if browser_info.is_ok() {
+                //                                         browsers.push(browser_info.unwrap())
+                //                                     } else {
+                //                                         println!(
+                //                                             "Error reading browser info: {}",
+                //                                             browser_info.err().unwrap()
+                //                                         )
+                //                                     }
+                //                                 }
+                //                             }
+                //                         });
+                //                     }
+                //                 } else {
+                //                     println!("No CFBundleURLSchemes dictionary found.")
+                //                 }
+                //             } else {
+                //                 println!("Cannot get CFBundleURLTypes item as dictionary.")
+                //             }
+                //         })
+                //     } else {
+                //         println!(
+                //             "CFBundleURLTypes dictionary found, but can't retrieve it as an array."
+                //         );
+                //     }
+                // } else {
+                //     println!("No CFBundleURLTypes dictionary found.")
+                // }
+            } else {
+                #[cfg(debug_assertions)]
+                println!(
+                    "Could not read PList file {}",
+                    info_plist_path.clone().to_string_lossy()
+                )
             }
 
-            println!("Finished reading {}", info_plist_path.clone().to_string_lossy());
-            // if let app_info.get(key)
+            #[cfg(debug_assertions)]
+            println!(
+                "Finished reading {}",
+                info_plist_path.clone().to_string_lossy()
+            );
+
+            Ok(())
         })
     });
-    // for dir in directories {
-    //     let files = read_dir(dir).unwrap();
-    //     files.map
-    // }
+
+    #[cfg(debug_assertions)]
+    if reading_results.is_err() {
+        println!("Browser reading errors {}", reading_results.unwrap_err());
+    }
 
     Ok(browsers)
 }
