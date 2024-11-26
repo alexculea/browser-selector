@@ -1,3 +1,4 @@
+use crate::{BrowserSelectorUI, UserInterface};
 use cacao::core_foundation::bundle;
 use plist::Value;
 
@@ -8,7 +9,11 @@ use crate::{
     os::shared::{BinaryType, VersionInfo},
     ui::ListItem,
 };
-use std::{fs::*, path::Path};
+use std::{
+    fs::*,
+    hash::{DefaultHasher, Hash, Hasher},
+    path::Path,
+};
 
 #[derive(Debug, Clone)]
 pub struct Browser {
@@ -47,34 +52,30 @@ impl Default for Browser {
 impl TryInto<ListItem<Browser>> for &Browser {
     type Error = crate::error::BSError;
     fn try_into(self) -> BSResult<ListItem<Browser>> {
-        // let image =
-        //     BrowserSelectorUI::<Browser>::load_image(self.exe_path.as_str())
-        //         .unwrap_or_default();
+        let image = BrowserSelectorUI::<Browser>::load_image(self.exe_path.as_str()).unwrap();
 
-        // let uuid = {
-        //     let mut hasher = DefaultHasher::new();
-        //     self.exe_path.hash(&mut hasher);
-        //     hasher.finish().to_string()
-        // };
+        let uuid = {
+            let mut hasher = DefaultHasher::new();
+            self.exe_path.hash(&mut hasher);
+            hasher.finish().to_string()
+        };
 
-        // Ok(ListItem {
-        //     title: self.version.product_name.clone(),
-        //     subtitle: vec![
-        //         self.version.product_version.clone(),
-        //         self.version.binary_type.to_string(),
-        //         self.version.company_name.clone(),
-        //         self.version.file_description.clone(),
-        //     ]
-        //     .into_iter()
-        //     .filter(|itm| itm.len() > 0)
-        //     .collect::<Vec<String>>()
-        //     .join(" | "),
-        //     image,
-        //     uuid,
-        //     state: std::rc::Rc::new(self.clone()),
-        // })
-
-        todo!()
+        Ok(ListItem {
+            title: self.version.product_name.clone(),
+            subtitle: vec![
+                self.version.product_version.clone(),
+                self.version.binary_type.to_string(),
+                self.version.company_name.clone(),
+                self.version.file_description.clone(),
+            ]
+            .into_iter()
+            .filter(|itm| itm.len() > 0)
+            .collect::<Vec<String>>()
+            .join(" | "),
+            image,
+            uuid,
+            state: std::rc::Rc::new(self.clone()),
+        })
     }
 }
 
@@ -103,9 +104,13 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
                 .unwrap()
                 .as_dictionary()
             {
-                let (url_schemes_result, url_schemas_option) =
-                    supported_url_schemes_from_appinfo(app_info_dict)?;
+                let url_schemes_result = supported_url_schemes_from_appinfo(app_info_dict);
 
+                if (url_schemes_result.is_err()) {
+                    return Ok(());
+                }
+
+                let (url_schemes_result, url_schemas_option) = url_schemes_result.unwrap();
                 if url_schemas_option.is_none() {
                     #[cfg(debug_assertions)]
                     println!(
@@ -153,6 +158,9 @@ pub fn read_system_browsers_sync() -> BSResult<Vec<Browser>> {
     if reading_results.is_err() {
         println!("Browser reading errors {}", reading_results.unwrap_err());
     }
+
+    #[cfg(debug_assertions)]
+    println!("Found {} browsers on the system.", browsers.len());
 
     Ok(browsers)
 }
