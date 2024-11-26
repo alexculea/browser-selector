@@ -1,14 +1,14 @@
-#[cfg(target_os = "windows")]
-mod win;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+mod win;
 
 pub mod ev_loop;
 
 use crate::error::BSResult;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
-use winit::window::{WindowId};
+use winit::window::WindowId;
 
 use std::rc::Rc;
 
